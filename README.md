@@ -1,21 +1,11 @@
-# ElixirTcp
+# Elixir TCP/IP presentation code
 
-**TODO: Add description**
+## Description
 
-## Installation
+This is the code used to generate some examples for my ElixirConf.EU 2018 presentation on Elixir and `:gen_tcp`.
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `elixir_tcp` to your list of dependencies in `mix.exs`:
+## License
 
-```elixir
-def deps do
-  [
-    {:elixir_tcp, "~> 0.1.0"}
-  ]
-end
-```
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at [https://hexdocs.pm/elixir_tcp](https://hexdocs.pm/elixir_tcp).
-
+Copyright 2018 Orestis Markou. All rights reserved.
