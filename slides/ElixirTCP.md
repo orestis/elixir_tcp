@@ -80,6 +80,203 @@ The audience should be already familiar with Elixir code and some core BEAM conc
 * Exposes a BSD Socket API in the BEAM, via a port
 * Blocking mode (passive)
 * Non-blocking mode (active)
+* Highly configurable and intricate
+
+---
+
+## Hello world, server
+
+* Accept connections on port 4001
+* Send the string "Hello!"
+* Close the connection
+* Repeat
+
+---
+
+## Demo 
+
+example1.exs
+
+```
+~ $ telnet 127.0.0.1 4001
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+Hello!
+Connection closed by foreign host.
+```
+
+```
+~ $ nc 127.0.0.1 4001
+Hello!
+~ $
+```
+
+---
+
+## Server Code
+
+```elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                reuseaddr: true])
+  server_handler(listen_socket)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+---
+
+
+## Server Code
+
+```elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                reuseaddr: true])
+  server_handler(listen_socket)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+---
+
+## Server code
+
+* Listen socket vs actual socket
+* `:binary` vs charlist for data
+* `reuseaddr` useful for demo purposes
+* `shutdown` is more gentle than `close`
+* One process listens, multiple processes accept
+* Use Ranch for this: https://github.com/ninenines/ranch
+
+---
+
+## Client code
+
+```elixir
+def client do
+  {:ok, socket} = :gen_tcp.connect('localhost', 4001, 
+                    [:binary, active: true])
+  client_handler(socket)
+end
+
+def client_handler(socket) do
+  receive do
+    {:tcp, ^socket, data} ->
+      IO.write data
+      client_handler(socket)
+    {:tcp_closed, ^socket} -> IO.puts "== CLOSED =="
+  end
+end
+```
+
+---
+
+## Client code
+
+* Host is always a charlist 
+* `active` mode turns data into messages (default)
+* message data are "amorphous" - no shape
+
+---
+
+## Two way - demo
+
+example2.exs
+
+---
+
+
+## Two-way - server
+
+```elixir
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "HELLO?")
+  receive do
+    {:tcp, ^socket, data} ->
+      :ok = :gen_tcp.send(socket, "Hello, #{data}!\r\n")
+  end
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+
+---
+
+## Two-way - client
+
+```elixir
+def client_handler(socket) do
+  receive do
+    {:tcp, ^socket, "HELLO?"} ->
+      d = IO.gets "Enter your name: "
+      :ok = :gen_tcp.send(socket, String.trim(d))
+      client_handler(socket)
+    {:tcp, ^socket, data} ->
+      IO.write data
+      client_handler(socket)
+    {:tcp_closed, ^socket} -> IO.puts "== CLOSED =="
+  end
+end
+```
+
+---
+
+## Major gotcha
+
+* No guarantee that "HELLO?" will arrive in one message
+* Depends on various arcane OS and ERTS parameters 
+* Should work most of the time with tiny payloads like this
+
+---
+
+## Protocols
+
+* Abstractions over TCP that gives shape to the data packets.
+* Some are common (HTTP), some are custom (your own!)
+* Some are even provided by :gen_tcp 
+
+---
+
+## Packet protocol
+
+* Provided by :gen_tcp
+* Transparently adds a length header to each send/receive operation
+* Supports messages up to 2GB
+* Very useful when you control both ends
+
+---
+
+## Packet protocol
+
+```[.highlight: 3,11] elixir
+  def server do
+    {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                  packet: 2,
+                                                  reuseaddr: true])
+    server_handler(listen_socket)
+  end
+
+  def client do
+    {:ok, socket} = :gen_tcp.connect('localhost', 4001,
+      [:binary,
+       packet: 2,
+       active: true])
+    client_handler(socket)
+  end
+```
 
 ---
 
@@ -280,7 +477,7 @@ end
 
 ---
 
-## Protocols
+## Common Protocols
 
 * HTTP
 * SSH
@@ -292,6 +489,13 @@ end
 
 ---
 
+## Built-in protocols
+
+* `:inet.setopts/2`
+* `[packet: N]`, N in (1, 2, 4), send/receive
+* `line` (receive only)
+
+---
 
 
 ## Recap
@@ -343,6 +547,19 @@ def recv do
   end
 end
 ```
+
+## Active mode
+
+* Inverse the control flow
+* Can be used in a GenServer (`handle_info`)
+* Makes the protocol logic a bit harder to follow
+* Can overflow your server -- no back-pressure
+
+## Hybrid mode
+
+* Instead of `[active: true]`, `[active: N]` or `[active: :once]`
+* Receive N data messages, then go back to passive mode
+* Return to active mode by calling `:inet.setopts(socket, options)`
 
 <!--
 
