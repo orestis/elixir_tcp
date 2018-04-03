@@ -81,6 +81,7 @@ The audience should be already familiar with Elixir code and some core BEAM conc
 * Blocking mode (passive)
 * Non-blocking mode (active)
 * Highly configurable and intricate
+* Closely tied with `:inet.setopts/2`
 
 ---
 
@@ -187,7 +188,8 @@ end
 
 * Host is always a charlist 
 * `active` mode turns data into messages (default)
-* message data are "amorphous" - no shape
+* Can also set `[active: once]` or `[active: N]` to receive one or N messages
+* NOTE: message data are "amorphous" - no shape
 
 ---
 
@@ -234,23 +236,144 @@ end
 
 ---
 
+## Passive mode
+
+* Instead of receiving data as messages, directly read from the socket
+* Blocking API with timeouts
+* Provides back-pressure
+* Closer to the original BSD API
+
+---
+
+## Passive mode server
+
+```elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                active: false,
+                                                reuseaddr: true])
+  server_handler(listen_socket)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "HELLO?")
+  {:ok, data} = :gen_tcp.recv(socket, 0)
+  :ok = :gen_tcp.send(socket, "Hello, #{data}!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+
+```
+
+## Passive mode client
+
+```elixir
+def client do
+  {:ok, socket} = :gen_tcp.connect('localhost', 4001,
+    [:binary, active: false])
+  client_handler(socket)
+end
+
+def client_handler(socket) do
+  case :gen_tcp.recv(socket, 0, 5000) do
+    {:ok, "HELLO?"} ->
+      d = IO.gets "Enter your name: "
+      :ok = :gen_tcp.send(socket, String.trim(d))
+      client_handler(socket)
+    {:ok, data} ->
+      IO.write data
+      client_handler(socket)
+    {:error, :closed} ->
+      IO.puts "== CLOSED =="
+  end
+end
+```
+
+## Passive mode
+
+* `recv(socket, length)`
+* `recv(socket, length, timeout)`
+* When `length == 0`, "read all available"
+* When `length > 0`, "read exactly `length` bytes"
+* `timeout` defaults to `Infinity`
+
+---
+
 ## Major gotcha
 
-* No guarantee that "HELLO?" will arrive in one message
+* How do you know how many bytes to read? (passive mode)
+* No guarantee that "HELLO?" will arrive in a single message (active mode)
 * Depends on various arcane OS and ERTS parameters 
-* Should work most of the time with tiny payloads like this
+* Works most of the time with tiny payloads like this
+* Will break on real-world usage
+* Another level of abstraction is needed
 
 ---
 
 ## Protocols
 
-* Abstractions over TCP that gives shape to the data packets.
+* Abstractions over TCP that give shape to the data packets
 * Some are common (HTTP), some are custom (your own!)
-* Some are even provided by :gen_tcp 
+* Some are even provided by `:gen_tcp`
+* Basically state machines
 
 ---
 
-## Packet protocol
+## Protocol specifications
+
+e.g. Daytime protocol (RFC 867)
+
+> **TCP Based Daytime Service**
+>
+> One daytime service is defined as a connection based application on
+> TCP.  A server listens for TCP connections on TCP port 13.  Once a
+> connection is established the current date and time is sent out the
+> connection as a ascii character string (and any data received is
+> thrown away).  The service closes the connection after sending the
+> quote.
+
+---
+
+## Protocol specifications
+
+e.g. HTTP/1.1 protocol (RFC 2616)
+
+> <176 pages>
+
+e.g. Memcached protocol
+
+> <1200 lines of text>
+
+---
+
+## Protocol specifications
+
+* What comes next?
+* What form does it come in?
+* Who is responsible for the next transmission?
+* etc.
+
+---
+
+## Protocol implementation
+
+* Read some data
+* Does it match what I expect?
+* Not yet - read some more
+* No - error
+* Yes - go to next state
+
+---
+## Untangle the protocol logic from the TCP logic
+
+* Abstract the "transport" out
+* Can provide a dummy transport for testing
+* Can transparently adapt to TLS/SSL, tunnels etc.
+
+---
+
+## Honorable mention - Packet protocol
 
 * Provided by :gen_tcp
 * Transparently adds a length header to each send/receive operation
@@ -280,326 +403,8 @@ end
 
 ---
 
-## Hello world (request)
 
-```elixir
-{:ok, socket} = :gen_tcp.connect('www.google.com', 80,
-                                    [:binary, active: false], 5000)
-:ok = :gen_tcp.send(socket, "GET / HTTP/1.0 \r\n\r\n")
-{:ok, response} = :gen_tcp.recv(socket, 0, 5000)
-IO.puts response
-```
-
+# BREAK
 
 ---
 
-## Hello world (response)
-
-```
-HTTP/1.0 302 Found
-Location: http://www.google.lu/?gws_rd=cr&dcr=0&ei=EgOtWr7UIcOP0gWa-bCYAg
-Cache-Control: private
-Content-Type: text/html; charset=UTF-8
-Date: Sat, 17 Mar 2018 11:59:14 GMT
-
-... snip ...
-
-<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
-<TITLE>302 Moved</TITLE></HEAD><BODY>
-<H1>302 Moved</H1>
-The document has moved
-<A HREF="http://www.google.lu/?gws_rd=cr&amp;dcr=0&amp;ei=EgOtWr7UIcOP0gWa-bCYAg">here</A>.
-</BODY></HTML>
-```
-
----
-
-## Connect
-
-```elixir
-{:ok, socket} = :gen_tcp.connect('www.google.com', 80,
-                                    [:binary, active: false], 5000)
-```
-
-* Blocks -- *always use timeout!*
-* Hostname is a **charlist**
-* List argument is options (huge!)
-* `:binary` means response should be a binary (vs charlist)
-* `active: false` means use passive/blocking mode
-
----
-
-## Send
-
-```elixir
-:ok = :gen_tcp.send(socket, "GET / HTTP/1.0 \r\n\r\n")
-```
-
-* Send binary data (`iodata`)
-* No send timeout -- global socket `send_timeout` option [^3]
-
-[^3]: timeouts will be discussed later
-
----
-
-## Receive
-
-```elixir
-{:ok, response} = :gen_tcp.recv(socket, 0, 5000)
-```
-
-* Blocks -- *always use timeout!*
-* Must specify how much data to read??
-* How should **I** know?
-* What does "read zero data" even *mean?*
-
----
-
-## ???
-
-```elixir
-{:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
-                                  [:binary, active: false])
-:ok = :gen_tcp.send(socket,
-                    ["GET /files/84/84-0.txt HTTP/1.1\r\n",
-                    "Host: www.gutenberg.org\r\n",
-                    "Accept: */*\r\n\r\n"])
-{:ok, response} = :gen_tcp.recv(socket, 0, 5000)
-IO.puts response
-IO.puts "Received #{byte_size(response)} bytes"
-```
-
----
-
-## ???
-
-```[.highlight: 11]
-HTTP/1.1 200 OK
-Server: Apache
-... snip ...
-
-Frankenstein;
-or, the Modern Prometheus
-
-by
-
-Mary Wollston
-==== Received 1440 bytes ====
-```
-
----
-
-## Stream abstraction breakdown
-
-* The OS maintains its own receiving and sending buffers
-* As packets come in from the network, they are written there
-* The BSD socket API reads and writes from/to these buffers
-* As our code reads from the buffer, room is made for new data
-* Small responses may fit entirely in the buffer -- **confusion!**
-* Need a way to know when sender is done sending
-
-![](annie-spratt-593479-unsplash.jpg)
-
----
-
-## Enter protocols
-
-* Pre-agreed ways of controlling communications.
-* e.g. for HTTP requests, end with two `CRLF`: 
-    `"GET / HTTP/1.0 \r\n\r\n"`
-* e.g. for HTTP responses, close the connection:
-
-```[.highlight: 7]
-$ telnet google.com 80
-GET / HTTP/1.0
-
-HTTP/1.0 302 Found
-... snip ...
-</BODY></HTML>
-Connection closed by foreign host.
-```
-
----
-
-## Shared understanding
-
-* What should I expect?
-* How big is the payload?
-* What happens next?
-
-
----
-
-## How big is the payload?
-
-```[.highlight: 7]
-HTTP/1.1 200 OK
-Server: Apache
-Last-Modified: Sat, 13 January 2018 15:04:24 GMT
-<snip>
-ETag: "6e25a016"
-Content-Type: text/plain; charset=UTF-8
-Content-Length: 450783
-Date: Tue, 03 Apr 2018 09:06:40 GMT
-
-```
-
----
-
-```[.highlight: 7] elixir 
-{:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
-                                  [:binary, active: false])
-:ok = :gen_tcp.send(socket,
-                    ["GET /files/84/84-0.txt HTTP/1.1\r\n",
-                    "Host: www.gutenberg.org\r\n",
-                    "Accept: */*\r\n\r\n"])
-response = _recv(socket, [])
-IO.puts "Received #{byte_size(response)} bytes"
-```
-
----
-
-```elixir
-def _recv(socket, acc) do
-  r = :gen_tcp.recv(socket, 0, 5000)
-  case r do
-    {:ok, data} -> _recv(socket, [data|acc])
-    other -> # {:error, :timeout}
-      Enum.reverse(acc) |> IO.iodata_to_binary()
-  end
-end
-```
-
-```
-==== Received 451357 bytes ====
-```
-(`Content-Length` excludes headers!)
-
----
-
-## Common Protocols
-
-* HTTP
-* SSH
-* FTP
-* SMTP
-* POP3
-* TLS/SSL
-* <your own>
-
----
-
-## Built-in protocols
-
-* `:inet.setopts/2`
-* `[packet: N]`, N in (1, 2, 4), send/receive
-* `line` (receive only)
-
----
-
-
-## Recap
-
-* IP is an unreliable, packet-based transport
-* TCP is a reliable, stream-based layer over IP
-* Protocols give meaning to the stream
-
----
-
-## Back to the code
-
----
-
-## Passive, or, "non-active mode"
-
-* Blocking API
-* Direct flow control (what happens next)
-* Very similar to other languages
-* Must spawn a dedicate process
-
----
-
-## Active mode
-
-* Receive data and events as messages
-
-```elixir
-def hello do
-  {:ok, socket} = :gen_tcp.connect('www.google.com', 80,
-                                   [:binary, active: true])
-  :ok = :gen_tcp.send(socket, "GET / HTTP/1.0 \r\n\r\n")
-  recv()
-end
-```
-
----
-
-```elixir
-def recv do
-  receive do
-    {:tcp, socket, msg} ->
-        IO.puts msg
-        recv()
-    {:tcp_closed, socket} -> 
-        IO.puts "=== Closed ==="
-    {:tcp_error, socket, reason} -> 
-        IO.puts "=== Error #{inspect reason} ==="
-  end
-end
-```
-
-## Active mode
-
-* Inverse the control flow
-* Can be used in a GenServer (`handle_info`)
-* Makes the protocol logic a bit harder to follow
-* Can overflow your server -- no back-pressure
-
-## Hybrid mode
-
-* Instead of `[active: true]`, `[active: N]` or `[active: :once]`
-* Receive N data messages, then go back to passive mode
-* Return to active mode by calling `:inet.setopts(socket, options)`
-
-<!--
-
-How to know how much data to read?
-What happens
-
--->
-
-<!-- 
-
-Sections
-* Quick Overview / Bibliography
-* Concepts
-    * IP Primer
-    * TCP/IP layer
-    * BSD Socket API abstraction
-    * Erlang Ports?
-* gen_tcp clients
-    * connect passive quickstart (create a socket, pass in options, call functions on socket)
-    * Example: connect to a simple math server, send arithmetic, get back answer.
-    * Example: connect to google.com, send simplest HEAD request, receive result
-    * connect active — concept of controlling process
-    * Same examples with active mode
-    * Pitfalls
-        * Timeouts on send
-        * Timeouts on receive
-        * Backpressure
-        * Half-closed sockets
-        * Implementing a client protocol in active vs passive mode
-* `gen_tcp` servers
-    * listen at port
-    * accept a socket
-    * read/write to a socket (same as before)
-    * Pitfalls
-        * managing the listener, acceptor, handler
-        * you probably want to use ranch
-* ranch for servers
-    * listener
-    * transport
-    * protocol
-* ranch for clients???
-
--->
