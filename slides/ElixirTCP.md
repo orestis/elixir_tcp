@@ -222,6 +222,127 @@ HTTP/1.0 302 Found
 Connection closed by foreign host.
 ```
 
+---
+
+## Shared understanding
+
+* What should I expect?
+* How big is the payload?
+* What happens next?
+
+
+---
+
+## How big is the payload?
+
+```[.highlight: 7]
+HTTP/1.1 200 OK
+Server: Apache
+Last-Modified: Sat, 13 January 2018 15:04:24 GMT
+<snip>
+ETag: "6e25a016"
+Content-Type: text/plain; charset=UTF-8
+Content-Length: 450783
+Date: Tue, 03 Apr 2018 09:06:40 GMT
+
+```
+
+---
+
+```[.highlight: 7] elixir 
+{:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
+                                  [:binary, active: false])
+:ok = :gen_tcp.send(socket,
+                    ["GET /files/84/84-0.txt HTTP/1.1\r\n",
+                    "Host: www.gutenberg.org\r\n",
+                    "Accept: */*\r\n\r\n"])
+response = _recv(socket, [])
+IO.puts "Received #{byte_size(response)} bytes"
+```
+
+---
+
+```elixir
+def _recv(socket, acc) do
+  r = :gen_tcp.recv(socket, 0, 5000)
+  case r do
+    {:ok, data} -> _recv(socket, [data|acc])
+    other -> # {:error, :timeout}
+      Enum.reverse(acc) |> IO.iodata_to_binary()
+  end
+end
+```
+
+```
+==== Received 451357 bytes ====
+```
+(`Content-Length` excludes headers!)
+
+---
+
+## Protocols
+
+* HTTP
+* SSH
+* FTP
+* SMTP
+* POP3
+* TLS/SSL
+* <your own>
+
+---
+
+
+
+## Recap
+
+* IP is an unreliable, packet-based transport
+* TCP is a reliable, stream-based layer over IP
+* Protocols give meaning to the stream
+
+---
+
+## Back to the code
+
+---
+
+## Passive, or, "non-active mode"
+
+* Blocking API
+* Direct flow control (what happens next)
+* Very similar to other languages
+* Must spawn a dedicate process
+
+---
+
+## Active mode
+
+* Receive data and events as messages
+
+```elixir
+def hello do
+  {:ok, socket} = :gen_tcp.connect('www.google.com', 80,
+                                   [:binary, active: true])
+  :ok = :gen_tcp.send(socket, "GET / HTTP/1.0 \r\n\r\n")
+  recv()
+end
+```
+
+---
+
+```elixir
+def recv do
+  receive do
+    {:tcp, socket, msg} ->
+        IO.puts msg
+        recv()
+    {:tcp_closed, socket} -> 
+        IO.puts "=== Closed ==="
+    {:tcp_error, socket, reason} -> 
+        IO.puts "=== Error #{inspect reason} ==="
+  end
+end
+```
 
 <!--
 
