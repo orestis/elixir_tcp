@@ -1,6 +1,8 @@
+build-lists: true
+<!--
 #slidenumbers: true
 #slidecount: true
-build-lists: true
+-->
 
 # Going low level with TCP sockets and `:gen_tcp`
 
@@ -10,6 +12,25 @@ build-lists: true
 
 #### `@orestis`
 #### `orestis.gr`
+
+---
+
+## About me
+
+* 15 years of programming
+* Old-school web
+* Desktop Applications
+* Interactive Installations
+* New-school web
+
+---
+
+## Why this talk?
+
+* External hardware control
+* PJLink protocol for projectors
+* Obscure IP-powerbars
+* Terse official docs
 
 ---
 
@@ -27,11 +48,10 @@ build-lists: true
 * Like passing notes in school
 * Put data in a packet, pass it on
 * Hope for the best
-* Optionally, put the packet in an envelope
 
 ---
 
-## Internet Protocol (IP in TCP/IP) (issues)
+## Internet Protocol questions
 
 * How do you know that your packet arrived at the destination? 
 * What happens if your data won't fit the packet?
@@ -58,12 +78,15 @@ build-lists: true
 
 ![](annie-spratt-593479-unsplash.jpg)
 
+^ Perhaps mention envelopes
+
 ---
 
 ## BSD Sockets API
 
 * Most common TCP/IP API
-* Breaks the illusion slightly, adapting to real-life implementations
+* Implemented by OS
+* Slightly breaks the illusion
 
 ---
 
@@ -79,7 +102,6 @@ build-lists: true
 * Accept connections on port 4001
 * Send the string "Hello!"
 * Close the connection
-* Repeat
 
 ---
 
@@ -198,7 +220,7 @@ end
 
 ## Client code
 
-```[.highlight: 2-3] elixir
+```[.highlight: 2-4] elixir
 def client do
   {:ok, socket} = :gen_tcp.connect('localhost', 4001, 
                     [:binary, active: true])
@@ -220,12 +242,52 @@ end
 
 ---
 
+## Client code
+
+```[.highlight: 8-13] elixir
+def client do
+  {:ok, socket} = :gen_tcp.connect('localhost', 4001, 
+                    [:binary, active: true])
+  client_handler(socket)
+end
+
+def client_handler(socket) do
+  receive do
+    {:tcp, ^socket, data} ->
+      IO.write data
+      client_handler(socket)
+    {:tcp_closed, ^socket} -> IO.puts "== CLOSED =="
+  end
+end
+```
+
+---
+
 ## Demo 
 
 example1.exs
 
 ---
 
+## Two-way stream - server
+
+* Accept connections
+* Send `"HELLO?"`
+* Wait for name
+* Send `"Hello, <name>!"`
+* Close the connection
+
+---
+
+## Two-way stream - client
+
+* Connect
+* Wait for `"HELLO?"`
+* Send name
+* Read all data
+* Wait until connection is closed
+
+---
 
 
 ## Two-way - server
@@ -294,10 +356,10 @@ example2b.exs
 
 ## Passive mode
 
+* Closer to the original BSD API
 * Instead of receiving data as messages, directly read from the socket
 * Blocking API with timeouts
 * Provides back-pressure
-* Closer to the original BSD API
 
 ---
 
@@ -409,9 +471,9 @@ end
 
 * `recv(socket, length)`
 * `recv(socket, length, timeout)`
-* When `length == 0`, "read all available"
-* When `length > 0`, "read exactly `length` bytes"
 * `timeout` defaults to `:infinity`
+* When `length > 0`, "read exactly `length` bytes"
+* When `length == 0`, "read all available"
 
 ---
 
@@ -431,7 +493,15 @@ end
 * Abstractions over TCP that give shape to the data packets
 * Some are common (HTTP), some are custom (your own!)
 * Some are even provided by `:gen_tcp`
-* Basically state machines
+
+---
+
+## Protocol specifications
+
+* What comes next?
+* What form does it come in?
+* Who is responsible for the next transmission?
+* etc.
 
 ---
 
@@ -462,14 +532,6 @@ e.g. Memcached protocol
 
 ---
 
-## Protocol specifications
-
-* What comes next?
-* What form does it come in?
-* Who is responsible for the next transmission?
-* etc.
-
----
 
 ## Built-in protocols
 
