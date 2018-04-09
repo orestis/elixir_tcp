@@ -1,29 +1,24 @@
-slidenumbers: true
-slidecount: true
+#slidenumbers: true
+#slidecount: true
+build-lists: true
+
 # Going low level with TCP sockets and `:gen_tcp`
 
----
+<br>
 
-## Summary
+### Orestis Markou
 
-TCP sockets are used everywhere, though most of the time the details are hidden in high-level APIs and protocols. However, the BEAM makes writing such low-level network code a breeze — this talk will give a brief overview of how Erlang’s built-in `:gen_tcp` can be used to build low-level client and server applications.
-
-The audience should be already familiar with Elixir code and some core BEAM concepts such as processes and messages.
+#### `@orestis`
+#### `orestis.gr`
 
 ---
 
 ## Why bother?
 
 * Foundation of the Internet
-* At the base of most [^1] of all network-related code
 * Will make you wonder how everything even *works*
 * Will make you appreciate the engineers that designed it
 
-[^1]: UDP is the other major one
-
----
-
-## [fit] Internet Protocol (IP in TCP/IP)
 
 ---
 
@@ -31,19 +26,17 @@ The audience should be already familiar with Elixir code and some core BEAM conc
 
 * Like passing notes in school
 * Put data in a packet, pass it on
-* Optionally, put the packet in an envelope
 * Hope for the best
+* Optionally, put the packet in an envelope
 
 ---
 
-## Internet Protocol (IP in TCP/IP) (cont'd)
+## Internet Protocol (IP in TCP/IP) (issues)
 
-* How do you know that your packet arrived at the destination? [^2]
+* How do you know that your packet arrived at the destination? 
 * What happens if your data won't fit the packet?
 * If you have multiple packets, how do you guarantee order?
 * etc.
-
-[^2]: Look up the Two Generals problem
 
 
 ---
@@ -70,18 +63,14 @@ The audience should be already familiar with Elixir code and some core BEAM conc
 ## BSD Sockets API
 
 * Most common TCP/IP API
-* Breaks the illusion slightly, adapting to real-life concerns
-* Read buffer, write buffer, flushing, blocking etc.
+* Breaks the illusion slightly, adapting to real-life implementations
 
 ---
 
 ## `:gen_tcp`
 
-* Exposes a BSD Socket API in the BEAM, via a port
-* Blocking mode (passive)
-* Non-blocking mode (active)
+* Exposes a BSD Socket API in the BEAM
 * Highly configurable and intricate
-* Closely tied with `:inet.setopts/2`
 
 ---
 
@@ -94,34 +83,14 @@ The audience should be already familiar with Elixir code and some core BEAM conc
 
 ---
 
-## Demo 
-
-example1.exs
-
-```
-~ $ telnet 127.0.0.1 4001
-Trying 127.0.0.1...
-Connected to localhost.
-Escape character is '^]'.
-Hello!
-Connection closed by foreign host.
-```
-
-```
-~ $ nc 127.0.0.1 4001
-Hello!
-~ $
-```
-
----
-
 ## Server Code
 
 ```elixir
 def server do
   {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                 reuseaddr: true])
-  server_handler(listen_socket)
+  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
+  Process.sleep(:infinity)
 end
 
 def server_handler(listen_socket) do
@@ -136,11 +105,12 @@ end
 
 ## Server Code
 
-```elixir
+```[.highlight: 2-3] elixir
 def server do
   {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                 reuseaddr: true])
-  server_handler(listen_socket)
+  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
+  Process.sleep(:infinity)
 end
 
 def server_handler(listen_socket) do
@@ -150,18 +120,60 @@ def server_handler(listen_socket) do
   server_handler(listen_socket)
 end
 ```
----
 
-## Server code
-
-* Listen socket vs actual socket
-* `:binary` vs charlist for data
-* `reuseaddr` useful for demo purposes
-* `shutdown` is more gentle than `close`
-* One process listens, multiple processes accept
-* Use Ranch for this: https://github.com/ninenines/ranch
+^ `:binary` vs charlist for data
+^ `reuseaddr` useful for demo purposes
 
 ---
+
+## Server Code
+
+```[.highlight: 4-5] elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                reuseaddr: true])
+  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
+  Process.sleep(:infinity)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+
+^ One process listens, multiple processes accept
+^ Use Ranch for this: https://github.com/ninenines/ranch
+
+---
+
+## Server Code
+
+```[.highlight: 8-13] elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                reuseaddr: true])
+  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
+  Process.sleep(:infinity)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+
+^ Listen socket vs actual socket
+^ accept is blocking
+^ shutdown is more gentle
+^ recurse for the next connection
+
+---
+
 
 ## Client code
 
@@ -186,18 +198,34 @@ end
 
 ## Client code
 
-* Host is always a charlist 
-* `active` mode turns data into messages (default)
-* Can also set `[active: once]` or `[active: N]` to receive one or N messages
-* NOTE: message data are "amorphous" - no shape
+```[.highlight: 2-3] elixir
+def client do
+  {:ok, socket} = :gen_tcp.connect('localhost', 4001, 
+                    [:binary, active: true])
+  client_handler(socket)
+end
+
+def client_handler(socket) do
+  receive do
+    {:tcp, ^socket, data} ->
+      IO.write data
+      client_handler(socket)
+    {:tcp_closed, ^socket} -> IO.puts "== CLOSED =="
+  end
+end
+```
+
+^ Host is always a charlist 
+^ `active` mode turns incomning data into erlang messages (default)
 
 ---
 
-## Two way - demo
+## Demo 
 
-example2.exs
+example1.exs
 
 ---
+
 
 
 ## Two-way - server
@@ -215,6 +243,8 @@ def server_handler(listen_socket) do
 end
 ```
 
+^ two way communications
+
 ---
 
 ## Two-way - client
@@ -223,8 +253,8 @@ end
 def client_handler(socket) do
   receive do
     {:tcp, ^socket, "HELLO?"} ->
-      d = IO.gets "Enter your name: "
-      :ok = :gen_tcp.send(socket, String.trim(d))
+      d = IO.gets("Enter your name: ") |> String.trim()
+      :ok = :gen_tcp.send(socket, d)
       client_handler(socket)
     {:tcp, ^socket, data} ->
       IO.write data
@@ -235,6 +265,32 @@ end
 ```
 
 ---
+
+## Two-way - client
+
+```[.highlight: 2,3,7,10] elixir
+def client_handler(socket) do
+  receive do
+    {:tcp, ^socket, "HELLO?"} ->
+      d = IO.gets("Enter your name: ") |> String.trim()
+      :ok = :gen_tcp.send(socket, d)
+      client_handler(socket)
+    {:tcp, ^socket, data} ->
+      IO.write data
+      client_handler(socket)
+    {:tcp_closed, ^socket} -> IO.puts "== CLOSED =="
+  end
+end
+```
+
+---
+
+## Two way - demo
+
+example2b.exs
+
+---
+
 
 ## Passive mode
 
@@ -249,9 +305,8 @@ end
 
 ```elixir
 def server do
-  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
-                                                active: false,
-                                                reuseaddr: true])
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary, reuseaddr: true
+                                                active: false])
   server_handler(listen_socket)
 end
 
@@ -263,8 +318,35 @@ def server_handler(listen_socket) do
   :ok = :gen_tcp.shutdown(socket, :read_write)
   server_handler(listen_socket)
 end
-
 ```
+
+---
+
+## Passive mode server
+
+```[.highlight: 3,10] elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary, reuseaddr: true
+                                                active: false])
+  server_handler(listen_socket)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "HELLO?")
+  {:ok, data} = :gen_tcp.recv(socket, 0, 5000)
+  :ok = :gen_tcp.send(socket, "Hello, #{data}!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+
+^ active: false (default is true even for servers)
+^ read zero bytes, blocking call, timeout 5000 millis
+^ default timeout infinity
+
+---
+
 
 ## Passive mode client
 
@@ -278,17 +360,50 @@ end
 def client_handler(socket) do
   case :gen_tcp.recv(socket, 0, 5000) do
     {:ok, "HELLO?"} ->
-      d = IO.gets "Enter your name: "
-      :ok = :gen_tcp.send(socket, String.trim(d))
+      d = IO.gets("Enter your name: ") |> String.trim()
+      :ok = :gen_tcp.send(socket, d)
       client_handler(socket)
     {:ok, data} ->
       IO.write data
       client_handler(socket)
-    {:error, :closed} ->
-      IO.puts "== CLOSED =="
+    {:error, :closed} -> IO.puts "== CLOSED =="
   end
 end
 ```
+
+---
+
+## Passive mode client
+
+```[.highlight: 4] elixir
+def client do
+  {:ok, socket} = :gen_tcp.connect('localhost', 4001,
+    [:binary, 
+    active: false])
+  client_handler(socket)
+end
+```
+
+---
+
+## Passive mode client
+
+```[.highlight: 2,3,7,10] elixir
+def client_handler(socket) do
+  case :gen_tcp.recv(socket, 0, 5000) do
+    {:ok, "HELLO?"} ->
+      d = IO.gets("Enter your name: ") |> String.trim()
+      :ok = :gen_tcp.send(socket, d)
+      client_handler(socket)
+    {:ok, data} ->
+      IO.write data
+      client_handler(socket)
+    {:error, :closed} -> IO.puts "== CLOSED =="
+  end
+end
+```
+
+---
 
 ## Passive mode
 
@@ -296,7 +411,7 @@ end
 * `recv(socket, length, timeout)`
 * When `length == 0`, "read all available"
 * When `length > 0`, "read exactly `length` bytes"
-* `timeout` defaults to `Infinity`
+* `timeout` defaults to `:infinity`
 
 ---
 
@@ -304,7 +419,7 @@ end
 
 * How do you know how many bytes to read? (passive mode)
 * No guarantee that "HELLO?" will arrive in a single message (active mode)
-* Depends on various arcane OS and ERTS parameters 
+* Depends on various arcane parameters (OS/BEAM)
 * Works most of the time with tiny payloads like this
 * Will break on real-world usage
 * Another level of abstraction is needed
@@ -356,55 +471,131 @@ e.g. Memcached protocol
 
 ---
 
-## Protocol implementation
-
-* Read some data
-* Does it match what I expect?
-* Not yet - read some more
-* No - error
-* Yes - go to next state
-
----
-## Untangle the protocol logic from the TCP logic
-
-* Abstract the "transport" out
-* Can provide a dummy transport for testing
-* Can transparently adapt to TLS/SSL, tunnels etc.
-
----
-
-## Honorable mention - Packet protocol
+## Built-in protocols
 
 * Provided by :gen_tcp
-* Transparently adds a length header to each send/receive operation
-* Supports messages up to 2GB
+* Limited in scope, non-extensible
+* Might be useful
+
+---
+
+## Prefix header length
+
+```elixir
+[packet: 2]
+```
+
+* Transparently add/strip header
+* 1, 2 or 4 byte header length
+* Support up to 2GB messages
 * Very useful when you control both ends
 
 ---
 
-## Packet protocol
+## Line-based messages
 
-```[.highlight: 3,11] elixir
-  def server do
-    {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
-                                                  packet: 2,
-                                                  reuseaddr: true])
-    server_handler(listen_socket)
-  end
+```elixir
+[packet: :line,
+line_delimiter: ?\n,
+packet_size: 255]
+```
 
-  def client do
-    {:ok, socket} = :gen_tcp.connect('localhost', 4001,
-      [:binary,
-       packet: 2,
-       active: true])
-    client_handler(socket)
-  end
+* Split incoming messages by newline
+* Outgoing messages are your responsibility
+* A few gotchas, must evaluate
+
+^ unfortunately can't set CRLF as delimiter
+^ might not be as bullet proof as needed
+
+---
+
+## Mutable sockets
+
+* Can change mode on-the-fly (binary, active)
+* Active mode can be one shot or N-shot or permanent
+* Can change protocols on the fly
+* Read a line, extract content length, read raw bytes
+
+---
+
+```elixir
+def memcached_client_get do
+  {:ok, socket} = :gen_tcp.connect('localhost', 11211,
+    [:binary,  active: false,
+      packet: :line])
+  :gen_tcp.send(socket, "get elixirconf\r\n")
+  {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
+  IO.puts "Raw response:"
+  IO.inspect response
+  <<"VALUE elixirconf ", resp::binary>> = response
+  [_, length] = resp |> String.trim() |> String.split() 
+    |> Enum.map(&String.to_integer/1)
+  :inet.setopts(socket, [packet: 0])
+  {:ok, data} = :gen_tcp.recv(socket, length, 5000)
+  IO.puts "Actual data:"
+  IO.inspect data
+end
 ```
 
 ---
 
-
-# BREAK
+```[.highlight: 4,6,12,13]elixir
+def memcached_client_get do
+  {:ok, socket} = :gen_tcp.connect('localhost', 11211,
+    [:binary,  active: false,
+      packet: :line])
+  :gen_tcp.send(socket, "get elixirconf\r\n")
+  {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
+  IO.puts "Raw response:"
+  IO.inspect response
+  <<"VALUE elixirconf ", resp::binary>> = response
+  [_, length] = resp |> String.trim() |> String.split() 
+    |> Enum.map(&String.to_integer/1)
+  :inet.setopts(socket, [packet: 0])
+  {:ok, data} = :gen_tcp.recv(socket, length, 5000)
+  IO.puts "Actual data:"
+  IO.inspect data
+end
+```
 
 ---
 
+## Demo
+
+protocols.exs
+`/usr/local/opt/memcached/bin/memcached`
+
+---
+
+## Pain point: Untangle the protocol logic from the socket logic
+
+* Abstract the "transport" out
+* Could provide a dummy transport for testing
+* Could transparently adapt to TLS/SSL, tunnels etc.
+* Good space for a library
+* (I'm **not** working on one!)
+
+---
+
+# Resources
+
+* TCP/IP Illustrated, Volume 1 [Fall & Stevens]
+* http://erlang.org/doc/man/gen_tcp.html
+* http://erlang.org/doc/man/inet.html
+* https://ninenines.eu/docs/en/ranch/1.4/guide/
+* https://github.com/orestis/elixir_tcp
+
+---
+
+# Thank you!
+
+## Questions?
+
+### https://github.com/orestis/elixir_tcp
+
+<br>
+
+### Orestis Markou
+
+#### `@orestis`
+#### `orestis.gr`

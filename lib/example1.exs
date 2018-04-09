@@ -2,7 +2,8 @@ defmodule Example1 do
   def server do
     {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                  reuseaddr: true])
-    server_handler(listen_socket)
+    for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
+    Process.sleep(:infinity)
   end
 
   def server_handler(listen_socket) do
@@ -28,5 +29,7 @@ defmodule Example1 do
   end
 end
 
-#Example1.server()
-Example1.client()
+case System.argv() do
+  ["client"] -> Example1.client()
+  ["server"] -> Example1.server()
+end

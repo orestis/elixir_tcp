@@ -1,4 +1,4 @@
-defmodule Example2 do
+defmodule Example3 do
   def server do
     {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                   packet: 2,
@@ -40,6 +40,6 @@ defmodule Example2 do
 end
 
 case System.argv() do
-  ["client"] -> Example2.client()
-  ["server"] -> Example2.server()
+  ["client"] -> Example3.client()
+  ["server"] -> Example3.server()
 end
