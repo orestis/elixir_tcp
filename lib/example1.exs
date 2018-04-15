@@ -8,7 +8,8 @@ defmodule Example1 do
 
   def server_handler(listen_socket) do
     {:ok, socket} = :gen_tcp.accept(listen_socket)
-    :ok = :gen_tcp.send(socket, "Hello!\r\n")
+    d = DateTime.utc_now() |> DateTime.to_string()
+    :ok = :gen_tcp.send(socket, d <> "\r\n")
     :ok = :gen_tcp.shutdown(socket, :read_write)
     server_handler(listen_socket)
   end
