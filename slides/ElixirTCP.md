@@ -1,4 +1,5 @@
-build-lists: true
+build-lists: false
+autoscale: true
 <!--
 #slidenumbers: true
 #slidecount: true
@@ -15,53 +16,41 @@ build-lists: true
 
 ---
 
-## About me
+## About
 
-* 15 years of programming
-* Old-school web
-* Desktop Applications
-* Interactive Installations
-* New-school web
+### Orestis Markou
 
----
-
-## Why this talk?
-
-* External hardware control
-* PJLink protocol for projectors
-* Obscure IP-powerbars
-* Terse official docs
+#### `@orestis`
+#### `orestis.gr`
 
 ---
 
-## Why bother?
+## Why?
 
-* Foundation of the Internet
-* Will make you wonder how everything even *works*
-* Will make you appreciate the engineers that designed it
+^ External hardware control
+^ PJLink protocol for projectors
+^ Obscure IP-powerbars
+^ Terse official docs
+^ Foundation of the Internet
+^ Will make you wonder how everything even *works*
+^ Will make you appreciate the engineers that designed it
 
 
 ---
 
-## Internet Protocol (IP in TCP/IP)
-
+##  Internet Protocol (IP in TCP/IP)
+[.build-lists: false]
 * Like passing notes in school
 * Put data in a packet, pass it on
-* Hope for the best
+* Hope for the best!
+
+^ Packet arrived?
+^ Data too big?
+^ Ordering?
 
 ---
 
-## Internet Protocol questions
-
-* How do you know that your packet arrived at the destination? 
-* What happens if your data won't fit the packet?
-* If you have multiple packets, how do you guarantee order?
-* etc.
-
-
----
-
-## [fit] Transport Control Protocol (TCP in TCP/IP)
+## Transport Control Protocol (TCP in TCP/IP)
 
 ![original](annie-spratt-593479-unsplash.jpg)
 
@@ -71,39 +60,68 @@ build-lists: true
 
 ## TCP/IP
 
-* Gives you a **point-to-point**, **two-way stream** abstraction on top of the chaos
-* Make a connection to the other party
-* Write data to your end, appears on the other end
-* and vice-versa
+* **Point-to-point**,
+* **stream**
+* **two-way** 
 
 ![](annie-spratt-593479-unsplash.jpg)
 
-^ Perhaps mention envelopes
+^ make connection/dial phone
+^ just talk / listen (write data/read data)
 
 ---
 
-## BSD Sockets API
+##  BSD Sockets API
 
-* Most common TCP/IP API
-* Implemented by OS
-* Slightly breaks the illusion
+* `socket()`
+* `bind()`
+* `listen()`
+* `accept()`
+* `connect()`
+* ...
+
+^ 1983
+^ network as file
+^ POSIX standard
+^ Most common TCP/IP API
+^ Implemented by your OS
+^ Slightly breaks the illusion
 
 ---
 
 ## `:gen_tcp`
 
-* Exposes a BSD Socket API in the BEAM
-* Highly configurable and intricate
+* `accept/1,2`
+* `close/1`
+* `connect/3,4`
+* `listen/2`
+* `recv/2,3`
+* `send/2`
+* `shutdown/2`
+* `controlling_process/2`
+
+^ BSD Sockets in the BEAM
+^ Arcane & intricate
+^ reflects the intricacies of BSD & BEAM together
+
+
 
 ---
 
 ## Hello world, server
 
 * Accept connections on port 4001
-* Send the string "Hello!"
+* Send the current datetime
 * Close the connection
 
 ---
+
+## Demo
+
+example1.exs
+
+---
+
 
 ## Server Code
 
@@ -111,13 +129,13 @@ build-lists: true
 def server do
   {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                 reuseaddr: true])
-  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
-  Process.sleep(:infinity)
+  server_handler(listen_socket)
 end
 
 def server_handler(listen_socket) do
   {:ok, socket} = :gen_tcp.accept(listen_socket)
-  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  d = DateTime.utc_now() |> DateTime.to_string()
+  :ok = :gen_tcp.send(socket, d <> "\r\n")
   :ok = :gen_tcp.shutdown(socket, :read_write)
   server_handler(listen_socket)
 end
@@ -131,13 +149,13 @@ end
 def server do
   {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                 reuseaddr: true])
-  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
-  Process.sleep(:infinity)
+  server_handler(listen_socket)
 end
 
 def server_handler(listen_socket) do
   {:ok, socket} = :gen_tcp.accept(listen_socket)
-  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  d = DateTime.utc_now() |> DateTime.to_string()
+  :ok = :gen_tcp.send(socket, d <> "\r\n")
   :ok = :gen_tcp.shutdown(socket, :read_write)
   server_handler(listen_socket)
 end
@@ -150,40 +168,17 @@ end
 
 ## Server Code
 
-```[.highlight: 4-5] elixir
+```[.highlight: 7-13] elixir
 def server do
   {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
                                                 reuseaddr: true])
-  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
-  Process.sleep(:infinity)
-end
-
-def server_handler(listen_socket) do
-  {:ok, socket} = :gen_tcp.accept(listen_socket)
-  :ok = :gen_tcp.send(socket, "Hello!\r\n")
-  :ok = :gen_tcp.shutdown(socket, :read_write)
   server_handler(listen_socket)
 end
-```
-
-^ One process listens, multiple processes accept
-^ Use Ranch for this: https://github.com/ninenines/ranch
-
----
-
-## Server Code
-
-```[.highlight: 8-13] elixir
-def server do
-  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
-                                                reuseaddr: true])
-  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
-  Process.sleep(:infinity)
-end
 
 def server_handler(listen_socket) do
   {:ok, socket} = :gen_tcp.accept(listen_socket)
-  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  d = DateTime.utc_now() |> DateTime.to_string()
+  :ok = :gen_tcp.send(socket, d <> "\r\n")
   :ok = :gen_tcp.shutdown(socket, :read_write)
   server_handler(listen_socket)
 end
@@ -263,13 +258,36 @@ end
 
 ---
 
-## Demo 
-
-example1.exs
+## One server, many clients
 
 ---
 
+## Server Code
+
+```[.highlight: 4-5] elixir
+def server do
+  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary,
+                                                reuseaddr: true])
+  for _ <- 0..10, do: spawn(fn -> server_handler(listen_socket) end)
+  Process.sleep(:infinity)
+end
+
+def server_handler(listen_socket) do
+  {:ok, socket} = :gen_tcp.accept(listen_socket)
+  :ok = :gen_tcp.send(socket, "Hello!\r\n")
+  :ok = :gen_tcp.shutdown(socket, :read_write)
+  server_handler(listen_socket)
+end
+```
+
+^ One process listens, multiple processes accept
+^ Use Ranch for this: https://github.com/ninenines/ranch
+
+---
+
+
 ## Two-way stream - server
+[.build-lists: false]
 
 * Accept connections
 * Send `"HELLO?"`
@@ -280,6 +298,7 @@ example1.exs
 ---
 
 ## Two-way stream - client
+[.build-lists: false]
 
 * Connect
 * Wait for `"HELLO?"`
@@ -289,6 +308,11 @@ example1.exs
 
 ---
 
+## Two way - demo
+
+example2b.exs
+
+---
 
 ## Two-way - server
 
@@ -347,19 +371,18 @@ end
 
 ---
 
-## Two way - demo
-
-example2b.exs
-
----
 
 
 ## Passive mode
+[.build-lists: false]
 
 * Closer to the original BSD API
-* Instead of receiving data as messages, directly read from the socket
+* Read/write to a "file"
 * Blocking API with timeouts
 * Provides back-pressure
+
+^ send is the same
+^ recv is changing
 
 ---
 
@@ -477,22 +500,26 @@ end
 
 ---
 
-## Major gotcha
+## Major gotchas
 
-* How do you know how many bytes to read? (passive mode)
-* No guarantee that "HELLO?" will arrive in a single message (active mode)
-* Depends on various arcane parameters (OS/BEAM)
-* Works most of the time with tiny payloads like this
-* Will break on real-world usage
-* Another level of abstraction is needed
+* *Passive:* How many bytes to read?
+* *Active:* Will "HELLO?" arrive in a single message?
+* **This is by design!**
+
+^ Something like race condition!
+^ Depends on various arcane parameters (OS/BEAM)
+^ Works most of the time with tiny payloads like this
+^ Will break on real-world usage
+^ Another level of abstraction is needed
 
 ---
 
 ## Protocols
 
-* Abstractions over TCP that give shape to the data packets
-* Some are common (HTTP), some are custom (your own!)
-* Some are even provided by `:gen_tcp`
+* Give shape to the data packets
+* Common or niche or your own!
+
+^ Some are even provided by `:gen_tcp`
 
 ---
 
@@ -501,7 +528,7 @@ end
 * What comes next?
 * What form does it come in?
 * Who is responsible for the next transmission?
-* etc.
+* (Distributed state machine)
 
 ---
 
@@ -528,7 +555,7 @@ e.g. HTTP/1.1 protocol (RFC 2616)
 
 e.g. Memcached protocol
 
-> <1200 lines of text>
+> <1200 lines>
 
 ---
 
@@ -568,6 +595,13 @@ packet_size: 255]
 
 ^ unfortunately can't set CRLF as delimiter
 ^ might not be as bullet proof as needed
+
+---
+
+## Demo
+
+protocols.exs
+`/usr/local/opt/memcached/bin/memcached`
 
 ---
 
@@ -622,20 +656,11 @@ end
 
 ---
 
-## Demo
-
-protocols.exs
-`/usr/local/opt/memcached/bin/memcached`
-
----
-
 ## Pain point: Untangle the protocol logic from the socket logic
 
 * Abstract the "transport" out
-* Could provide a dummy transport for testing
-* Could transparently adapt to TLS/SSL, tunnels etc.
-* Good space for a library
-* (I'm **not** working on one!)
+* Provide a dummy transport for testing
+* Transparently adapt to TLS/SSL, tunnels etc.
 
 ---
 
