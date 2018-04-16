@@ -78,6 +78,7 @@ autoscale: true
 * `listen()`
 * `accept()`
 * `connect()`
+* `gethostbyname()`
 * ...
 
 ^ 1983
@@ -103,8 +104,18 @@ autoscale: true
 ^ BSD Sockets in the BEAM
 ^ Arcane & intricate
 ^ reflects the intricacies of BSD & BEAM together
+^ works hand in hand with inet
 
+---
 
+## `:inet`
+
+* `:inet.gethostbyname/1,2`
+* `:inet.setopts/2`
+* ...
+
+^ setopts is where a lot of documentation lives
+^ see the various types
 
 ---
 
@@ -186,7 +197,8 @@ end
 
 ^ Listen socket vs actual socket
 ^ accept is blocking
-^ shutdown is more gentle
+^ send does not mean send - just that the data got accepted by the OS
+^ shutdown is more gentle - wait for data to get sent before closing
 ^ recurse for the next connection
 
 ---
@@ -232,8 +244,9 @@ def client_handler(socket) do
 end
 ```
 
-^ Host is always a charlist 
+^ Host is always a charlist (see docs for other types)
 ^ `active` mode turns incomning data into erlang messages (default)
+^ active mode only relevant for receiving
 
 ---
 
@@ -258,7 +271,7 @@ end
 
 ---
 
-## One server, many clients
+## One server, many clients?
 
 ---
 
@@ -428,7 +441,6 @@ end
 
 ^ active: false (default is true even for servers)
 ^ read zero bytes, blocking call, timeout 5000 millis
-^ default timeout infinity
 
 ---
 
@@ -566,6 +578,10 @@ e.g. Memcached protocol
 * Limited in scope, non-extensible
 * Might be useful
 
+^ give shape to the packets 
+^ get returned by recv 
+^ get sent in active mode
+
 ---
 
 ## Prefix header length
@@ -578,6 +594,7 @@ e.g. Memcached protocol
 * 1, 2 or 4 byte header length
 * Support up to 2GB messages
 * Very useful when you control both ends
+* Use `0` for "raw" mode (default)
 
 ---
 
@@ -598,13 +615,6 @@ packet_size: 255]
 
 ---
 
-## Demo
-
-protocols.exs
-`/usr/local/opt/memcached/bin/memcached`
-
----
-
 ## Mutable sockets
 
 * Can change mode on-the-fly (binary, active)
@@ -613,6 +623,14 @@ protocols.exs
 * Read a line, extract content length, read raw bytes
 
 ---
+
+## Demo
+
+protocols.exs
+`/usr/local/opt/memcached/bin/memcached`
+
+---
+
 
 ```elixir
 def memcached_client_get do
@@ -661,6 +679,7 @@ end
 * Abstract the "transport" out
 * Provide a dummy transport for testing
 * Transparently adapt to TLS/SSL, tunnels etc.
+* Timeout handling
 
 ---
 
