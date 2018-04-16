@@ -6,11 +6,11 @@ defmodule Passive1 do
     IO.puts response
   end
 
-  def large do
+  def large_wrong do
     {:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
                                       [:binary, active: false])
     :ok = :gen_tcp.send(socket,
-                        ["GET /files/84/84-0.txt HTTP/1.1\r\n",
+                        ["GET /files/84/84-0.txt HTTP/1.0\r\n",
                         "Host: www.gutenberg.org\r\n",
                         "Accept: */*\r\n\r\n"])
     {:ok, response} = :gen_tcp.recv(socket, 0, 5000)
@@ -22,9 +22,9 @@ defmodule Passive1 do
     {:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
       [:binary, active: false])
     :ok = :gen_tcp.send(socket,
-      ["GET /files/84/84-0.txt HTTP/1.1\r\n",
+      ["GET /files/84/84-0.txt HTTP/1.0\r\n",
        "Host: www.gutenberg.org\r\n",
-       "Accept: */*\r\n\r\n"])
+       "Accept: text/plain\r\n\r\n"])
     response = _recv(socket, [])
     IO.puts response
     IO.puts "==== Received #{byte_size(response)} bytes ===="
@@ -49,4 +49,7 @@ defmodule Passive1 do
   end
 end
 
-Passive1.large_correct()
+case System.argv() do
+  ["wrong"] -> Passive1.large_wrong()
+  ["right"] -> Passive1.large_correct()
+end

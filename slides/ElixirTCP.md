@@ -14,29 +14,16 @@ autoscale: true
 #### `@orestis`
 #### `orestis.gr`
 
----
+#### https://github.com/orestis/elixir_tcp
 
-## About
-
-### Orestis Markou
-
-#### `@orestis`
-#### `orestis.gr`
-
----
-
-## Why?
-
+^ Basics or fundamentals of gen_tcp
 ^ External hardware control
 ^ PJLink protocol for projectors
 ^ Obscure IP-powerbars
 ^ Terse official docs
-^ Foundation of the Internet
-^ Will make you wonder how everything even *works*
-^ Will make you appreciate the engineers that designed it
-
 
 ---
+
 
 ##  Internet Protocol (IP in TCP/IP)
 [.build-lists: false]
@@ -47,24 +34,21 @@ autoscale: true
 ^ Packet arrived?
 ^ Data too big?
 ^ Ordering?
+^ Foundation of the Internet
+^ Will make you wonder how everything even *works*
+^ Will make you appreciate the engineers that designed it
 
 ---
 
 ## Transport Control Protocol (TCP in TCP/IP)
-
-![original](annie-spratt-593479-unsplash.jpg)
-
-[.footer: Photo by Annie Spratt on Unsplash]
-
----
-
-## TCP/IP
 
 * **Point-to-point**,
 * **stream**
 * **two-way** 
 
 ![](annie-spratt-593479-unsplash.jpg)
+
+[.footer: Photo by Annie Spratt on Unsplash]
 
 ^ make connection/dial phone
 ^ just talk / listen (write data/read data)
@@ -401,27 +385,6 @@ end
 
 ## Passive mode server
 
-```elixir
-def server do
-  {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary, reuseaddr: true
-                                                active: false])
-  server_handler(listen_socket)
-end
-
-def server_handler(listen_socket) do
-  {:ok, socket} = :gen_tcp.accept(listen_socket)
-  :ok = :gen_tcp.send(socket, "HELLO?")
-  {:ok, data} = :gen_tcp.recv(socket, 0)
-  :ok = :gen_tcp.send(socket, "Hello, #{data}!\r\n")
-  :ok = :gen_tcp.shutdown(socket, :read_write)
-  server_handler(listen_socket)
-end
-```
-
----
-
-## Passive mode server
-
 ```[.highlight: 3,10] elixir
 def server do
   {:ok, listen_socket} = :gen_tcp.listen(4001, [:binary, reuseaddr: true
@@ -444,31 +407,6 @@ end
 
 ---
 
-
-## Passive mode client
-
-```elixir
-def client do
-  {:ok, socket} = :gen_tcp.connect('localhost', 4001,
-    [:binary, active: false])
-  client_handler(socket)
-end
-
-def client_handler(socket) do
-  case :gen_tcp.recv(socket, 0, 5000) do
-    {:ok, "HELLO?"} ->
-      d = IO.gets("Enter your name: ") |> String.trim()
-      :ok = :gen_tcp.send(socket, d)
-      client_handler(socket)
-    {:ok, data} ->
-      IO.write data
-      client_handler(socket)
-    {:error, :closed} -> IO.puts "== CLOSED =="
-  end
-end
-```
-
----
 
 ## Passive mode client
 
@@ -509,6 +447,27 @@ end
 * `timeout` defaults to `:infinity`
 * When `length > 0`, "read exactly `length` bytes"
 * When `length == 0`, "read all available"
+
+---
+
+
+## Hello HTTP (whoops)
+
+```elixir
+
+{:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
+                                  [:binary, active: false])
+:ok = :gen_tcp.send(socket,
+                    ["GET /files/84/84-0.txt HTTP/1.0\r\n",
+                     "Host: www.gutenberg.org\r\n",
+                     "Accept: text/plain\r\n\r\n"])
+{:ok, response} = :gen_tcp.recv(socket, 0, 5000)
+IO.puts response
+IO.puts "==== Received #{byte_size(response)} bytes ===="
+```
+
+^ Won't do HTTPS!
+^ How many bytes will we receive?
 
 ---
 
@@ -569,8 +528,39 @@ e.g. Memcached protocol
 
 > <1200 lines>
 
+
 ---
 
+## Hello HTTP *
+
+```[.highlight: 7] elixir
+{:ok, socket} = :gen_tcp.connect('www.gutenberg.org', 80,
+                                  [:binary, active: false])
+:ok = :gen_tcp.send(socket,
+                    ["GET /files/84/84-0.txt HTTP/1.0\r\n",
+                     "Host: www.gutenberg.org\r\n",
+                     "Accept: text/plain\r\n\r\n"])
+response = _recv(socket, [])
+IO.puts response
+IO.puts "==== Received #{byte_size(response)} bytes ===="
+```
+
+---
+
+```elixir
+def _recv(socket, acc) do
+  r = :gen_tcp.recv(socket, 0, 5000)
+  case r do
+    {:ok, data} -> _recv(socket, [data|acc])
+    other ->
+      IO.puts("other")
+      IO.inspect(other)
+      Enum.reverse(acc) |> IO.iodata_to_binary()
+  end
+end
+```
+
+---
 
 ## Built-in protocols
 
@@ -683,25 +673,19 @@ end
 
 ---
 
-# Resources
+# Thank you!
+
+* https://github.com/orestis/elixir_tcp
 
 * TCP/IP Illustrated, Volume 1 [Fall & Stevens]
 * http://erlang.org/doc/man/gen_tcp.html
 * http://erlang.org/doc/man/inet.html
 * https://ninenines.eu/docs/en/ranch/1.4/guide/
-* https://github.com/orestis/elixir_tcp
-
----
-
-# Thank you!
-
-## Questions?
-
-### https://github.com/orestis/elixir_tcp
-
-<br>
 
 ### Orestis Markou
 
 #### `@orestis`
 #### `orestis.gr`
+---
+
+
